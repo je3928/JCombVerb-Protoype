@@ -22,7 +22,7 @@ JCombVerbAudioProcessor::JCombVerbAudioProcessor()
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
                        ), valuetree (*this, nullptr, "PARAMETERS",
-                                     { std::make_unique<AudioParameterFloat> ("Rt60", "RT60", NormalisableRange<float> (0.0f, 10000.0f), 500), std::make_unique<AudioParameterFloat> ("Wet", "WET", NormalisableRange<float> (0.0f, 1.0f), 1)})
+                                     { std::make_unique<AudioParameterFloat> ("Rt60", "RT60", NormalisableRange<float> (0.0f, 10000.0f), 500), std::make_unique<AudioParameterFloat> ("Wet", "WET", NormalisableRange<float> (0.0f, 1.0f), 1), std::make_unique<AudioParameterFloat> ("Lpc", "LPC", NormalisableRange<float> (20.0f, 20000.0f), 20000) ,std::make_unique<AudioParameterFloat> ("Hpc", "HPC", NormalisableRange<float> (20.0f, 20000.0f), 20)})
  
 #endif
 {
@@ -119,6 +119,11 @@ void JCombVerbAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     comb2r.createDelayBuffer(sampleRate, 100);
     comb3r.createDelayBuffer(sampleRate, 100);
     comb4r.createDelayBuffer(sampleRate, 100);
+
+    LPL.reset(sampleRate);
+    LPR.reset(sampleRate);
+    HPL.reset(sampleRate);
+    HPR.reset(sampleRate);
     
     
 }
@@ -170,9 +175,13 @@ void JCombVerbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     
     auto RT60 = valuetree.getRawParameterValue("Rt60");
     auto Wet = valuetree.getRawParameterValue("Wet");
+    auto LPC = valuetree.getRawParameterValue("Lpc");
+    auto HPC = valuetree.getRawParameterValue("Hpc");
     
     float rt60 = RT60->load();
     float wet = Wet->load();
+    float lpc = LPC->load();
+    float hpc = HPC->load();
     
     CombFilterParameters comb1params = comb1l.getParameters();
     CombFilterParameters comb2params = comb2l.getParameters();
@@ -210,6 +219,24 @@ void JCombVerbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     comb2r.setParameters(comb2params);
     comb3r.setParameters(comb3params);
     comb4r.setParameters(comb4params);
+    
+    AudioFilterParameters LPFparams = LPL.getParameters();
+    AudioFilterParameters HPFparams = HPL.getParameters();
+    
+    LPFparams.algorithm = filterAlgorithm::kLPF1;
+    LPFparams.Q = 0.707;
+    LPFparams.fc = lpc;
+    
+    HPFparams.algorithm = filterAlgorithm::kHPF1;
+    HPFparams.Q = 0.707;
+    HPFparams.fc = hpc;
+    
+    LPL.setParameters(LPFparams);
+    LPR.setParameters(LPFparams);
+    
+    HPL.setParameters(HPFparams);
+    HPR.setParameters(HPFparams);
+    
     
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
@@ -255,6 +282,13 @@ void JCombVerbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         
         double ynl = xnl1 + xnl2 + xnl3 + xnl4;
         double ynr = xnr1 + xnr2 + xnr3 + xnr4;
+        
+        ynl = LPL.processAudioSample(ynl);
+        ynr = LPR.processAudioSample(ynr);
+        
+        ynl = HPL.processAudioSample(ynl);
+        ynr = HPR.processAudioSample(ynr);
+        
         
 //        ynl = (ynl * wet) + (xnldry * (- wet));
 //        ynr = (ynr * wet) + (xnrdry * (- wet));

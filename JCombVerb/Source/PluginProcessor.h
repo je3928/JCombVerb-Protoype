@@ -60,6 +60,9 @@ public:
     juce::AudioProcessorValueTreeState valuetree;
     
     CombFilter comb1l, comb1r, comb2l, comb2r, comb3l, comb3r, comb4l, comb4r;
+    
+    AudioFilter HPL, HPR;
+    AudioFilter LPL, LPR;
 
 private:
     //==============================================================================
